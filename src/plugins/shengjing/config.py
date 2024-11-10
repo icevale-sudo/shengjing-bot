@@ -1,5 +1,6 @@
-from pydantic import BaseModel
+from nonebot import get_driver
 
-
-class Config(BaseModel):
-    """Plugin Config Here"""
+# Read config
+config = get_driver().config
+DB_PATH = config.shengjing_db_path
+IMG_DIR_PATH = config.shengjing_img_dir_path

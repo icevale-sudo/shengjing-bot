@@ -8,7 +8,6 @@ from src.plugins.shengjing.models import *
 
 # Define arguments of the command
 parser = ArgumentParser("sj", add_help=False)
-parser.add_argument("-a", "--add", help="Quotation to be added")
 parser.add_argument("--max-id", action="store_true")
 parser.add_argument("-i", "--img", action="store_true")
 parser.add_argument("-n", "--id")
@@ -34,20 +33,6 @@ async def handle_default(args: Message = CommandArg()):
 
 
 @shengjing.handle()
-async def handle_add_text(args: Namespace = ShellCommandArgs()):
-    """Handled when a user adds a text quote to the database.
-
-    Args:
-        args (Namespace, optional): Defaults to ShellCommandArgs().
-    """
-    if quotation := args.add:
-        await record_call_count("add_text")
-
-        insert_text_quotation(quotation, get_max_id())
-        await shengjing.send("添加成功")
-
-
-@shengjing.handle()
 async def handle_add_img(event: Event, args: Namespace = ShellCommandArgs()):
     """Handled when a user adds a image quote to the database.
 
@@ -70,8 +55,8 @@ async def handle_add_img(event: Event, args: Namespace = ShellCommandArgs()):
             await shengjing.finish("错误：需要一张图片")
 
         download_image(image_urls[0])
-        img_id = get_max_id() + 1
-        insert_img_quotation(img_id)
+        img_id = await get_max_id() + 1
+        await insert_img_quotation(img_id)
         await shengjing.send(f"添加成功, ID: {str(img_id)}")
 
 
@@ -85,7 +70,7 @@ async def handle_max_id(args: Namespace = ShellCommandArgs()):
     if args.max_id:
         await record_call_count("get_max_id")
 
-        await shengjing.send(f"当前最大ID: {get_max_id()}")
+        await shengjing.send(f"当前最大ID: {await get_max_id()}")
 
 
 @shengjing.handle()
@@ -114,7 +99,6 @@ async def handle_call_counts(args: Namespace = ShellCommandArgs()):
     # call_type (str): Possible values include:
     # - \"get_random\"
     # - \"get_by_id\"
-    # - \"add_text\"
     # - \"add_image\"
     # - \"get_max_id\""""
     #             )
