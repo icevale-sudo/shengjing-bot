@@ -41,7 +41,6 @@ def extract_image_urls(message: MessageSegment) -> list:
 
 async def download_image(url: str):
     filename = os.path.join(IMG_DIR_PATH, f"{await get_max_id() + 1}.png")
-    # subprocess.run(f"curl -o {filename} \"{url}\"")
     command = ["curl", "-o", filename, url]
     subprocess.run(command, capture_output=True, text=True)
 
@@ -186,6 +185,32 @@ async def record_call_count(call_type: str):
         )
 
     await conn.commit()
+
+
+async def remove_quote(id: str) -> MessageSegment:
+    conn = await get_db_conn()
+    cursor = await get_db_cursor()
+    if await is_quote_exist(id):
+        await cursor.execute("DELETE FROM quotations WHERE id=?", (id,))
+        await conn.commit()
+
+        # Remove from img directory
+        command = ["mv", f"{IMG_DIR_PATH}{id}.png", f"{IMG_DIR_PATH}trash/"]
+        subprocess.run(command)
+
+        return MessageSegment.text(f"成功删除圣经{id}")
+    else:
+        return MessageSegment.text("错误：数据库中无该圣经")
+
+
+async def is_quote_exist(id: str):
+    cursor = await get_db_cursor()
+    await cursor.execute("SELECT COUNT(*) FROM quotations WHERE id=?", (id,))
+    count = (await cursor.fetchone())[0]
+    if count > 0:
+        return True
+    else:
+        return False
 
 
 if __name__ == "__main__":
