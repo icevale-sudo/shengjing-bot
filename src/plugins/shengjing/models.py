@@ -67,7 +67,7 @@ async def get_quote_by_id(id: str) -> MessageSegment:
         return MessageSegment.text(result[0])
 
 
-async def get_weighted_random_quote() -> MessageSegment:
+async def get_weighted_random_quote(weight_top_100, weight_others) -> MessageSegment:
     cursor = await get_db_cursor()
 
     # Get item count from database
@@ -76,9 +76,9 @@ async def get_weighted_random_quote() -> MessageSegment:
     item_count = (await cursor.fetchone())[0]
 
     # Get weighted random int
-    # Rule: weights of resent 100 quotes are 0.6, while others are 0.4
+    # Rule: weights of resent 100 quotes are 0.8, while others are 0.2
     elements = [i for i in range(1, item_count + 1)]
-    weights = [0.4] * (item_count - 100) + [0.6] * 100
+    weights = [weight_others] * (item_count - 100) + [weight_top_100] * 100
     weighted_random_index = random.choices(elements, weights)[0]
 
     # Get quote id
@@ -97,7 +97,7 @@ async def get_weighted_random_quote() -> MessageSegment:
         # If `is_img` is 1, return a Message containing image
         file_url = await get_img_path_by_id(quote_id)
         return MessageSegment.image(file_url) + MessageSegment.text(
-            f"ID: {quote_id}, Position: {weighted_random_index}, Weight: {0.6 if item_count - weighted_random_index <= 100 else 0.4}"
+            f"ID: {quote_id}, Position: {weighted_random_index}, Weight: {weight_top_100 if item_count - weighted_random_index <= 100 else weight_others}"
         )
     else:
         return MessageSegment.text(f"{quote}\n\n ID: {quote_id}")

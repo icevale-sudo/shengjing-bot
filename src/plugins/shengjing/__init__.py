@@ -31,7 +31,7 @@ async def handle_get_quote(args: Message = CommandArg()):
         await record_call_count("get_random")
 
         # await shengjing.send(await get_random_quote())
-        await shengjing.send(await get_weighted_random_quote())
+        await shengjing.send(await get_weighted_random_quote(0.8, 0.2))
 
 
 # Will be removed soon
