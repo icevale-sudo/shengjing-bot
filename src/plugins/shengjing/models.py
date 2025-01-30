@@ -32,6 +32,19 @@ async def insert_quote_blame(image_id: int, created_timestamp: int, requester_id
 
     logger.success(f"Tried adding quotation blame, id: {image_id}, time: {timestring}, req: {requester_id}, sender: {sender_id}")
 
+async def get_quote_blame(image_id: int):
+    cursor = await get_db_cursor()
+    # Query to check if the row exists and fetch the victim data
+    await cursor.execute(f"SELECT createdTime, requester, sender FROM blames WHERE id = ?", (image_id,))
+    row = await cursor.fetchone()
+
+    # If the victims exists, parse the JSON data and return the list of strings
+    if row:
+        createdTime, requester_id, sender_id = row
+        return createdTime, requester_id, sender_id
+    else:
+        return None
+
 async def insert_quote_victim(image_id: int, victim: str):
     conn = await get_db_conn()
     cursor = await get_db_cursor()
@@ -41,6 +54,19 @@ async def insert_quote_victim(image_id: int, victim: str):
     await conn.commit()
 
     logger.success(f"Tried adding quotation victim, id: {image_id}, victims: {victimstring}")
+
+async def get_quote_victim(image_id: int):
+    cursor = await get_db_cursor()
+    # Query to check if the row exists and fetch the victim data
+    await cursor.execute(f"SELECT victims FROM victims WHERE id = ?", (image_id,))
+    row = await cursor.fetchone()
+
+    # If the victims exists, parse the JSON data and return the list of strings
+    if row:
+        victims = row[0]
+        return json.loads(victims)
+    else:
+        return None
 
 async def get_max_id() -> int:
     cursor = await get_db_cursor()
@@ -72,6 +98,30 @@ async def get_img_path_by_id(id: str) -> str:
 
     return file_url
 
+async def get_quote_blame_victim_string_by_id(id: str) -> str:
+    cursor = await get_db_cursor()
+
+    # Get blame info if exist
+    blames = await get_quote_blame(id)
+    blame_str = ''
+    if not blames is None:
+        createdTime, requester_id, sender_id = blames
+        blame_str =  f'\n添加时间: {createdTime}'
+        blame_str += f'\n添加者: {requester_id}'
+        if requester_id != sender_id:
+            blame_str += f'\n发送者: {sender_id}'
+
+    # Get victim info if exist
+    victims = await get_quote_victim(id)
+    victims_str = ''
+    if not victims is None:
+        # Assume only one victim for now
+        victim = victims[0]
+        victims_str = f'\n正主: {victim}'
+    else:
+        victims_str = f'\n正主: 待添加'
+    
+    return blame_str + victims_str
 
 async def get_quote_by_id(id: str) -> MessageSegment:
     cursor = await get_db_cursor()
@@ -81,11 +131,13 @@ async def get_quote_by_id(id: str) -> MessageSegment:
     # ID is illegal
     if result is None:
         return MessageSegment.text("ERROR: No such ID in database or ID is illegal")
+    
+    bvstr = await get_quote_blame_victim_string_by_id(id)
 
     if result[1] == 1:  # is image
-        return MessageSegment.image(await get_img_path_by_id(id))
+        return MessageSegment.image(await get_img_path_by_id(id)) + MessageSegment.text(bvstr)
     else:  # is text
-        return MessageSegment.text(result[0])
+        return MessageSegment.text(result[0] + '\n' + bvstr)
 
 
 async def get_weighted_random_quote(weight_top_100, weight_others) -> MessageSegment:
@@ -116,12 +168,14 @@ async def get_weighted_random_quote(weight_top_100, weight_others) -> MessageSeg
     result = await cursor.fetchone()
 
     quote, is_img = result
+    selection_str = f"ID: {quote_id}, Position: {weighted_random_index}"
+    bvstr = await get_quote_blame_victim_string_by_id(quote_id)
 
     if is_img == 1:
         # If `is_img` is 1, return a Message containing image
         file_url = await get_img_path_by_id(quote_id)
         return MessageSegment.image(file_url) + MessageSegment.text(
-            f"ID: {quote_id}, Position: {weighted_random_index}, Weight: {weight_top_100 if item_count - weighted_random_index <= 100 else weight_others}"
+            selection_str + bvstr
         )
     else:
         return MessageSegment.text(f"{quote}\n\n ID: {quote_id}")
