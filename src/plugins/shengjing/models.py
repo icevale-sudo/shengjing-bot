@@ -48,11 +48,16 @@ async def get_quote_blame(quote_id: int):
 async def insert_quote_victim(quote_id: int, victim: str):
     conn = await get_db_conn()
     cursor = await get_db_cursor()
-    sql_cmd = "INSERT INTO victims (quote_id, victim) VALUES (?, ?)"
-    await cursor.execute(sql_cmd, (quote_id, victim))
-    await conn.commit()
+    # Check if the victim exist to avoid duplication
+    await cursor.execute(f"SELECT victim FROM victims WHERE quote_id = ? AND victim = ?", (quote_id, victim))
+    result = await cursor.fetchone()
+    
+    if not result:
+        sql_cmd = "INSERT INTO victims (quote_id, victim) VALUES (?, ?)"
+        await cursor.execute(sql_cmd, (quote_id, victim))
+        await conn.commit()
 
-    logger.success(f"Tried adding quotation victim, id: {quote_id}, victims: {victim}")
+        logger.success(f"Tried adding quotation victim, id: {quote_id}, victims: {victim}")
 
 async def get_quote_victim(quote_id: int):
     cursor = await get_db_cursor()
@@ -65,6 +70,22 @@ async def get_quote_victim(quote_id: int):
         return [u[0] for u in victims]
     else:
         return None
+
+async def remove_quote_victim(quote_id: int, victim: str):
+    conn = await get_db_conn()
+    cursor = await get_db_cursor()
+    if await is_quote_exist_in_db(quote_id):
+        await cursor.execute("DELETE FROM victims WHERE quote_id=? AND victim=?", (quote_id, victim))
+        await conn.commit()
+        logger.success(f"Remove victim {victim} from quotation {quote_id}")
+
+async def remove_quote_all_victims(quote_id: int):
+    conn = await get_db_conn()
+    cursor = await get_db_cursor()
+    if await is_quote_exist_in_db(quote_id):
+        await cursor.execute("DELETE FROM victims WHERE quote_id=?", (quote_id,))
+        await conn.commit()
+        logger.success(f"Remove all victims from quotation {quote_id}")
 
 async def get_max_id() -> int:
     cursor = await get_db_cursor()

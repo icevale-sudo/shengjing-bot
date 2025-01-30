@@ -68,7 +68,8 @@ async def handle_call_counts(args: Namespace = ShellCommandArgs()):
 shengjing_add_img = on_regex(r"^(添加|tj)")
 shengjing_specify = on_regex(r"^(sj|圣经)\d+")
 shengjing_remove = on_regex(r"^(删除)\d+", permission=SUPERUSER)
-
+shengjing_add_victim = on_regex(r"^(正主添加|zztj)\d+")
+shengjing_remove_victim = on_regex(r"^(正主移除|zzyc)\d+", permission=SUPERUSER)
 
 @shengjing_add_img.handle()
 async def handle_func(event: Event, bot: Bot):
@@ -142,3 +143,52 @@ async def handle_func(reg_str: str = RegexStr()):
     id = re.search(r"\d+", reg_str)
     res = await remove_quote(id.group())
     await shengjing.send(res)
+
+
+@shengjing_add_victim.handle()
+async def handle_func(event: Event, reg_str: str = RegexStr()):
+    id = re.search(r"\d+", reg_str).group()
+
+    if not await is_quote_exist_in_db(id):
+        await shengjing.finish(f"未找到ID为{id}的圣经")
+    
+    # Filter the message to check specified victims
+    msglist = list(event.message)
+    victim_list = []
+    # Segment 0 must be tjzz ensured by the regex
+    for msg in msglist[1:]:
+        if msg.type == 'at':
+            victim_list.append(msg.data['qq'])
+        else:
+            break
+    
+    if len(victim_list) > 0:
+        for victim_id in victim_list:
+            await insert_quote_victim(id, victim_id)
+        await shengjing.send(MessageSegment.text(f"已向{id}添加上述正主"))
+
+
+@shengjing_remove_victim.handle()
+async def handle_func(event: Event, reg_str: str = RegexStr()):
+    id = re.search(r"\d+", reg_str).group()
+
+    if not await is_quote_exist_in_db(id):
+        await shengjing.finish(f"未找到ID为{id}的圣经")
+    
+    # Filter the message to check specified victims
+    msglist = list(event.message)
+    victim_list = []
+    # Segment 0 must be yczz ensured by the regex
+    for msg in msglist[1:]:
+        if msg.type == 'at':
+            victim_list.append(msg.data['qq'])
+        else:
+            break
+
+    if len(victim_list) > 0:
+        for victim_id in victim_list:
+            await remove_quote_victim(id, victim_id)
+        await shengjing.send(MessageSegment.text(f"已移除{id}的上述正主"))
+    else:
+        await remove_quote_all_victims(id)
+        await shengjing.send(MessageSegment.text(f"已移除{id}的所有正主"))
