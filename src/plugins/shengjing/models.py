@@ -9,6 +9,8 @@ import sqlite3
 import subprocess
 import os
 import random
+import time
+import json
 
 
 async def insert_img_quotation(image_id: int):
@@ -20,6 +22,25 @@ async def insert_img_quotation(image_id: int):
 
     logger.success(f"Tried adding image quotation, whose id is {image_id}")
 
+async def insert_quote_blame(image_id: int, created_timestamp: int, requester_id: str, sender_id: str):
+    conn = await get_db_conn()
+    cursor = await get_db_cursor()
+    sql_cmd = "INSERT INTO blames (id, createdTime, requester, sender) VALUES (?, ?, ?, ?)"
+    timestring = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(created_timestamp))
+    await cursor.execute(sql_cmd, (image_id, timestring, requester_id, sender_id))
+    await conn.commit()
+
+    logger.success(f"Tried adding quotation blame, id: {image_id}, time: {timestring}, req: {requester_id}, sender: {sender_id}")
+
+async def insert_quote_victim(image_id: int, victim: str):
+    conn = await get_db_conn()
+    cursor = await get_db_cursor()
+    sql_cmd = "INSERT INTO victims (id, victims) VALUES (?, ?)"
+    victimstring = json.dumps([victim])
+    await cursor.execute(sql_cmd, (image_id, victimstring))
+    await conn.commit()
+
+    logger.success(f"Tried adding quotation victim, id: {image_id}, victims: {victimstring}")
 
 async def get_max_id() -> int:
     cursor = await get_db_cursor()

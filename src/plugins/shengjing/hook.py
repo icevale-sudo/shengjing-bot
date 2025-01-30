@@ -49,6 +49,32 @@ async def initialize_db():
         """)
         logger.success("Created `quotations` table.")
 
+    # Check if the `blames` table exists
+    await cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='blames'")
+    if not (await cursor.fetchone()):
+        # Create the `quotations` table if it doesn't exist
+        await cursor.execute("""
+            CREATE TABLE blames (
+                id INTEGER PRIMARY KEY,
+                createdTime TEXT,
+                requester TEXT,
+                sender TEXT
+            )
+        """)
+        logger.success("Created `blames` table.")
+    
+    # Check if the `victims` table exists
+    await cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='victims'")
+    if not (await cursor.fetchone()):
+        # Create the `quotations` table if it doesn't exist
+        await cursor.execute("""
+            CREATE TABLE victims (
+                id INTEGER PRIMARY KEY,
+                victims JSON
+            )
+        """)
+        logger.success("Created `victims` table.")
+    
     # Check if the `call_counts` table exists
     await cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='call_counts'")
     if not (await cursor.fetchone()):

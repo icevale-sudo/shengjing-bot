@@ -115,7 +115,7 @@ async def handle_call_counts(args: Namespace = ShellCommandArgs()):
         await shengjing.send(str(await get_call_count("all")))
 
 
-shengjing_add_img = on_fullmatch(("添加", "tj"), block=False)
+shengjing_add_img = on_regex(r"^(添加|tj)")
 shengjing_specify = on_regex(r"^(sj|圣经)\d+")
 shengjing_remove = on_regex(r"^(删除)\d+", permission=SUPERUSER)
 
@@ -129,11 +129,21 @@ async def handle_func(event: Event):
     """
     await record_call_count("add_image")
 
-    reply_message = (
-        event.reply.message
-        if hasattr(event, "reply") and event.reply
-        else event.message
-    )
+    request_time = event.time
+
+    # Filter the message to check if victim is specified
+    msglist = list(event.message)
+    victim_id = None
+    # Segment 0 must be tj-dev ensured by the regex
+    if len(msglist) > 1 and msglist[1].type == 'at':
+        victim_id = msglist[1].data['qq']
+    
+    reply_event = event.reply if hasattr(event, "reply") and event.reply else event
+    
+    requester_id = event.sender.user_id
+    reply_id = reply_event.sender.user_id
+    reply_message = reply_event.message
+    
     image_urls = extract_image_urls(reply_message)
 
     # Only require one image
@@ -143,7 +153,12 @@ async def handle_func(event: Event):
     await download_image(image_urls[0])
     img_id = await get_max_id() + 1
     await insert_img_quotation(img_id)
-    await shengjing.send(f"添加成功, ID: {str(img_id)}")
+    await insert_quote_blame(img_id, request_time, requester_id, reply_id)
+    resonse_str = f"添加成功, ID: {str(img_id)}"
+    if not victim_id is None:
+        await insert_quote_victim(img_id, victim_id)
+        resonse_str += f', 正主: {victim_id}'
+    await shengjing.send(resonse_str)
 
 
 @shengjing_specify.handle()
