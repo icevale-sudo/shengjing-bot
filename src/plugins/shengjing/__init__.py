@@ -83,10 +83,13 @@ async def handle_func(event: Event, bot: Bot):
 
     # Filter the message to check if victim is specified
     msglist = list(event.message)
-    victim_id = None
+    victim_list = []
     # Segment 0 must be tj-dev ensured by the regex
-    if len(msglist) > 1 and msglist[1].type == 'at':
-        victim_id = msglist[1].data['qq']
+    for msg in msglist[1:]:
+        if msg.type == 'at':
+            victim_list.append(msg.data['qq'])
+        else:
+            break
     
     reply_event = event.reply if hasattr(event, "reply") and event.reply else event
     
@@ -105,9 +108,18 @@ async def handle_func(event: Event, bot: Bot):
     await insert_img_quotation(img_id)
     await insert_quote_blame(img_id, request_time, requester_id, reply_id)
     resonse_str = f"添加成功, ID: {str(img_id)}"
-    if not victim_id is None:
-        await insert_quote_victim(img_id, victim_id)
-        resonse_str += f', 正主: {victim_id}'
+    if len(victim_list) > 0:
+        for victim_id in victim_list:
+            await insert_quote_victim(img_id, victim_id)
+        
+        resonse_str += f', 正主:'
+        if len(victim_list) == 1:
+            resonse_str += f'{await get_name_str_by_user_id(victim_list[0])}'
+        else:
+            for victim_id in victim_list:
+                resonse_str += f'\n{await get_name_str_by_user_id(victim_id)}'
+
+            
     await shengjing.send(resonse_str)
     
     await bot.call_api(
