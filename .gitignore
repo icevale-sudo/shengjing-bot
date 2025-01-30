@@ -141,3 +141,5 @@ dmypy.json
 
 
 pyproject.toml
+.DS_Store
+.history
