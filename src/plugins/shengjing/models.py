@@ -78,7 +78,10 @@ async def get_weighted_random_quote(weight_top_100, weight_others) -> MessageSeg
     # Get weighted random int
     # Rule: weights of resent 100 quotes are 0.8, while others are 0.2
     elements = [i for i in range(1, item_count + 1)]
-    weights = [weight_others] * (item_count - 100) + [weight_top_100] * 100
+    if item_count > 100:
+        weights = [weight_others] * (item_count - 100) + [weight_top_100] * 100
+    else:
+        weights = [weight_top_100] * item_count
     weighted_random_index = random.choices(elements, weights)[0]
 
     # Get quote id
