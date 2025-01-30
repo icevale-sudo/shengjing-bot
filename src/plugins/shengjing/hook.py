@@ -1,4 +1,4 @@
-from nonebot import get_driver
+from nonebot import logger, get_driver
 from src.plugins.shengjing.config import *
 
 import aiosqlite
@@ -47,7 +47,7 @@ async def initialize_db():
                 is_img INTEGER DEFAULT 0
             )
         """)
-        print("Created `quotations` table.")
+        logger.success("Created `quotations` table.")
 
     # Check if the `call_counts` table exists
     await cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='call_counts'")
@@ -59,7 +59,7 @@ async def initialize_db():
                 count INTEGER DEFAULT 0
             )
         """)
-        print("Created `call_counts` table.")
+        logger.success("Created `call_counts` table.")
 
     # Commit changes and close the connection
     await conn.commit()
@@ -68,6 +68,6 @@ async def initialize_db():
     img_dir = Path(IMG_DIR_PATH)
     if not img_dir.exists():
         img_dir.mkdir(parents=True, exist_ok=True)
-        print(f"Created image directory at {IMG_DIR_PATH}.")
+        logger.success(f"Created image directory at {IMG_DIR_PATH}.")
 
-    print("Database initialization check complete.")
+    logger.success("Database initialization check complete.")
