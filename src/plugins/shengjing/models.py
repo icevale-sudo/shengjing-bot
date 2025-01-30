@@ -1,5 +1,5 @@
 from nonebot.adapters.onebot.v11 import MessageSegment
-from nonebot import logger, get_driver
+from nonebot import logger, get_driver, get_bot
 from pathlib import Path
 
 from src.plugins.shengjing.config import *
@@ -98,18 +98,26 @@ async def get_img_path_by_id(id: str) -> str:
 
     return file_url
 
-async def get_quote_blame_victim_string_by_id(id: str) -> str:
-    cursor = await get_db_cursor()
+async def get_name_str_by_user_id(user_id: str):
+    bot = get_bot()
+    result = await bot.get_stranger_info(user_id=int(user_id))
+    if result:
+        return f"{result.get('nickname')}({user_id})"
+    else:
+        return user_id
 
+async def get_quote_blame_victim_str_by_id(id: str) -> str:
     # Get blame info if exist
     blames = await get_quote_blame(id)
     blame_str = ''
     if not blames is None:
         createdTime, requester_id, sender_id = blames
+        requester_str = await get_name_str_by_user_id(requester_id)
         blame_str =  f'\n添加时间: {createdTime}'
-        blame_str += f'\n添加者: {requester_id}'
+        blame_str += f'\n添加者: {requester_str}'
         if requester_id != sender_id:
-            blame_str += f'\n发送者: {sender_id}'
+            sender_str = await get_name_str_by_user_id(sender_id)
+            blame_str += f'\n发送者: {sender_str}'
 
     # Get victim info if exist
     victims = await get_quote_victim(id)
@@ -117,7 +125,8 @@ async def get_quote_blame_victim_string_by_id(id: str) -> str:
     if not victims is None:
         # Assume only one victim for now
         victim = victims[0]
-        victims_str = f'\n正主: {victim}'
+        victim_str = await get_name_str_by_user_id(victim)
+        victims_str = f'\n正主: {victim_str}'
     else:
         victims_str = f'\n正主: 待添加'
     
@@ -132,7 +141,7 @@ async def get_quote_by_id(id: str) -> MessageSegment:
     if result is None:
         return MessageSegment.text("ERROR: No such ID in database or ID is illegal")
     
-    bvstr = await get_quote_blame_victim_string_by_id(id)
+    bvstr = await get_quote_blame_victim_str_by_id(id)
 
     if result[1] == 1:  # is image
         return MessageSegment.image(await get_img_path_by_id(id)) + MessageSegment.text(bvstr)
@@ -169,7 +178,7 @@ async def get_weighted_random_quote(weight_top_100, weight_others) -> MessageSeg
 
     quote, is_img = result
     selection_str = f"ID: {quote_id}, Position: {weighted_random_index}"
-    bvstr = await get_quote_blame_victim_string_by_id(quote_id)
+    bvstr = await get_quote_blame_victim_str_by_id(quote_id)
 
     if is_img == 1:
         # If `is_img` is 1, return a Message containing image
