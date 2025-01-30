@@ -22,20 +22,20 @@ async def insert_img_quotation(image_id: int):
 
     logger.success(f"Tried adding image quotation, whose id is {image_id}")
 
-async def insert_quote_blame(image_id: int, created_timestamp: int, requester_id: str, sender_id: str):
+async def insert_quote_blame(quote_id: int, created_timestamp: int, requester_id: str, sender_id: str):
     conn = await get_db_conn()
     cursor = await get_db_cursor()
     sql_cmd = "INSERT INTO blames (id, createdTime, requester, sender) VALUES (?, ?, ?, ?)"
     timestring = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(created_timestamp))
-    await cursor.execute(sql_cmd, (image_id, timestring, requester_id, sender_id))
+    await cursor.execute(sql_cmd, (quote_id, timestring, requester_id, sender_id))
     await conn.commit()
 
-    logger.success(f"Tried adding quotation blame, id: {image_id}, time: {timestring}, req: {requester_id}, sender: {sender_id}")
+    logger.success(f"Tried adding quotation blame, id: {quote_id}, time: {timestring}, req: {requester_id}, sender: {sender_id}")
 
-async def get_quote_blame(image_id: int):
+async def get_quote_blame(quote_id: int):
     cursor = await get_db_cursor()
     # Query to check if the row exists and fetch the victim data
-    await cursor.execute(f"SELECT createdTime, requester, sender FROM blames WHERE id = ?", (image_id,))
+    await cursor.execute(f"SELECT createdTime, requester, sender FROM blames WHERE id = ?", (quote_id,))
     row = await cursor.fetchone()
 
     # If the victims exists, parse the JSON data and return the list of strings
@@ -45,26 +45,24 @@ async def get_quote_blame(image_id: int):
     else:
         return None
 
-async def insert_quote_victim(image_id: int, victim: str):
+async def insert_quote_victim(quote_id: int, victim: str):
     conn = await get_db_conn()
     cursor = await get_db_cursor()
-    sql_cmd = "INSERT INTO victims (id, victims) VALUES (?, ?)"
-    victimstring = json.dumps([victim])
-    await cursor.execute(sql_cmd, (image_id, victimstring))
+    sql_cmd = "INSERT INTO victims (quote_id, victim) VALUES (?, ?)"
+    await cursor.execute(sql_cmd, (quote_id, victim))
     await conn.commit()
 
-    logger.success(f"Tried adding quotation victim, id: {image_id}, victims: {victimstring}")
+    logger.success(f"Tried adding quotation victim, id: {quote_id}, victims: {victim}")
 
-async def get_quote_victim(image_id: int):
+async def get_quote_victim(quote_id: int):
     cursor = await get_db_cursor()
     # Query to check if the row exists and fetch the victim data
-    await cursor.execute(f"SELECT victims FROM victims WHERE id = ?", (image_id,))
-    row = await cursor.fetchone()
+    await cursor.execute(f"SELECT victim FROM victims WHERE quote_id = ?", (quote_id,))
+    victims = await cursor.fetchall()
 
     # If the victims exists, parse the JSON data and return the list of strings
-    if row:
-        victims = row[0]
-        return json.loads(victims)
+    if len(victims) > 0:
+        return [u[0] for u in victims]
     else:
         return None
 
@@ -122,13 +120,16 @@ async def get_quote_blame_victim_str_by_id(id: str) -> str:
     # Get victim info if exist
     victims = await get_quote_victim(id)
     victims_str = ''
-    if not victims is None:
-        # Assume only one victim for now
+    if victims is None:
+        victims_str = f'\n正主: 待添加'
+    elif len(victims) == 1:
         victim = victims[0]
         victim_str = await get_name_str_by_user_id(victim)
         victims_str = f'\n正主: {victim_str}'
     else:
-        victims_str = f'\n正主: 待添加'
+        victims_str = f'\n正主:'
+        for u in victims:
+            victims_str += '\n' + await get_name_str_by_user_id(u)
     
     return blame_str + victims_str
 

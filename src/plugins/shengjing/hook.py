@@ -70,7 +70,9 @@ async def initialize_db():
         await cursor.execute("""
             CREATE TABLE victims (
                 id INTEGER PRIMARY KEY,
-                victims JSON
+                quote_id INTEGER,
+                victim TEXT,
+                FOREIGN KEY (quote_id) REFERENCES quotations (id)
             )
         """)
         logger.success("Created `victims` table.")
