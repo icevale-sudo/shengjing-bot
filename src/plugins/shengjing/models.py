@@ -280,6 +280,8 @@ async def remove_quote(id: str) -> MessageSegment:
     cursor = await get_db_cursor()
     if await is_quote_exist_in_db(id):
         await cursor.execute("DELETE FROM quotations WHERE id=?", (id,))
+        await cursor.execute("DELETE FROM blames WHERE id=?", (id,))
+        await cursor.execute("DELETE FROM victims WHERE quote_id=?", (id,))
         await conn.commit()
 
         # Remove from img directory
