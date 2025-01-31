@@ -1,8 +1,8 @@
-English README will be added soon.
+[English](./README_EN.md) | **简体中文**
 
 ---
 
-## 文档
+## 阅读文档
 
 请阅读以下文档，并部署NapCatQQ、安装NoneBot脚手架、创建Simple模板的NoneBot项目。
 
