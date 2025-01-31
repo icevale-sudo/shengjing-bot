@@ -1,5 +1,5 @@
 from nonebot.adapters.onebot.v11 import MessageSegment
-from nonebot import logger, get_driver, get_bot
+from nonebot import logger, get_driver
 from pathlib import Path
 
 from src.plugins.shengjing.config import *
@@ -9,8 +9,6 @@ import sqlite3
 import subprocess
 import os
 import random
-import time
-import json
 
 
 async def insert_img_quotation(image_id: int):
@@ -22,70 +20,6 @@ async def insert_img_quotation(image_id: int):
 
     logger.success(f"Tried adding image quotation, whose id is {image_id}")
 
-async def insert_quote_blame(quote_id: int, created_timestamp: int, requester_id: str, sender_id: str):
-    conn = await get_db_conn()
-    cursor = await get_db_cursor()
-    sql_cmd = "INSERT INTO blames (id, createdTime, requester, sender) VALUES (?, ?, ?, ?)"
-    timestring = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(created_timestamp))
-    await cursor.execute(sql_cmd, (quote_id, timestring, requester_id, sender_id))
-    await conn.commit()
-
-    logger.success(f"Tried adding quotation blame, id: {quote_id}, time: {timestring}, req: {requester_id}, sender: {sender_id}")
-
-async def get_quote_blame(quote_id: int):
-    cursor = await get_db_cursor()
-    # Query to check if the row exists and fetch the victim data
-    await cursor.execute(f"SELECT createdTime, requester, sender FROM blames WHERE id = ?", (quote_id,))
-    row = await cursor.fetchone()
-
-    # If the victims exists, parse the JSON data and return the list of strings
-    if row:
-        createdTime, requester_id, sender_id = row
-        return createdTime, requester_id, sender_id
-    else:
-        return None
-
-async def insert_quote_victim(quote_id: int, victim: str):
-    conn = await get_db_conn()
-    cursor = await get_db_cursor()
-    # Check if the victim exist to avoid duplication
-    await cursor.execute(f"SELECT victim FROM victims WHERE quote_id = ? AND victim = ?", (quote_id, victim))
-    result = await cursor.fetchone()
-    
-    if not result:
-        sql_cmd = "INSERT INTO victims (quote_id, victim) VALUES (?, ?)"
-        await cursor.execute(sql_cmd, (quote_id, victim))
-        await conn.commit()
-
-        logger.success(f"Tried adding quotation victim, id: {quote_id}, victims: {victim}")
-
-async def get_quote_victim(quote_id: int):
-    cursor = await get_db_cursor()
-    # Query to check if the row exists and fetch the victim data
-    await cursor.execute(f"SELECT victim FROM victims WHERE quote_id = ?", (quote_id,))
-    victims = await cursor.fetchall()
-
-    # If the victims exists, parse the JSON data and return the list of strings
-    if len(victims) > 0:
-        return [u[0] for u in victims]
-    else:
-        return None
-
-async def remove_quote_victim(quote_id: int, victim: str):
-    conn = await get_db_conn()
-    cursor = await get_db_cursor()
-    if await is_quote_exist_in_db(quote_id):
-        await cursor.execute("DELETE FROM victims WHERE quote_id=? AND victim=?", (quote_id, victim))
-        await conn.commit()
-        logger.success(f"Remove victim {victim} from quotation {quote_id}")
-
-async def remove_quote_all_victims(quote_id: int):
-    conn = await get_db_conn()
-    cursor = await get_db_cursor()
-    if await is_quote_exist_in_db(quote_id):
-        await cursor.execute("DELETE FROM victims WHERE quote_id=?", (quote_id,))
-        await conn.commit()
-        logger.success(f"Remove all victims from quotation {quote_id}")
 
 async def get_max_id() -> int:
     cursor = await get_db_cursor()
@@ -117,42 +51,6 @@ async def get_img_path_by_id(id: str) -> str:
 
     return file_url
 
-async def get_name_str_by_user_id(user_id: str):
-    bot = get_bot()
-    result = await bot.get_stranger_info(user_id=int(user_id))
-    if result:
-        return f"{result.get('nickname')}({user_id})"
-    else:
-        return user_id
-
-async def get_quote_blame_victim_str_by_id(id: str) -> str:
-    # Get blame info if exist
-    blames = await get_quote_blame(id)
-    blame_str = ''
-    if not blames is None:
-        createdTime, requester_id, sender_id = blames
-        requester_str = await get_name_str_by_user_id(requester_id)
-        blame_str =  f'\n添加时间: {createdTime}'
-        blame_str += f'\n添加者: {requester_str}'
-        if requester_id != sender_id:
-            sender_str = await get_name_str_by_user_id(sender_id)
-            blame_str += f'\n发送者: {sender_str}'
-
-    # Get victim info if exist
-    victims = await get_quote_victim(id)
-    victims_str = ''
-    if victims is None:
-        victims_str = f'\n正主: 待添加'
-    elif len(victims) == 1:
-        victim = victims[0]
-        victim_str = await get_name_str_by_user_id(victim)
-        victims_str = f'\n正主: {victim_str}'
-    else:
-        victims_str = f'\n正主:'
-        for u in victims:
-            victims_str += '\n' + await get_name_str_by_user_id(u)
-    
-    return blame_str + victims_str
 
 async def get_quote_by_id(id: str) -> MessageSegment:
     cursor = await get_db_cursor()
@@ -162,13 +60,11 @@ async def get_quote_by_id(id: str) -> MessageSegment:
     # ID is illegal
     if result is None:
         return MessageSegment.text("ERROR: No such ID in database or ID is illegal")
-    
-    bvstr = await get_quote_blame_victim_str_by_id(id)
 
     if result[1] == 1:  # is image
-        return MessageSegment.image(await get_img_path_by_id(id)) + MessageSegment.text(bvstr)
+        return MessageSegment.image(await get_img_path_by_id(id))
     else:  # is text
-        return MessageSegment.text(result[0] + '\n' + bvstr)
+        return MessageSegment.text(result[0])
 
 
 async def get_weighted_random_quote(weight_top_100, weight_others) -> MessageSegment:
@@ -199,14 +95,12 @@ async def get_weighted_random_quote(weight_top_100, weight_others) -> MessageSeg
     result = await cursor.fetchone()
 
     quote, is_img = result
-    selection_str = f"ID: {quote_id}, Position: {weighted_random_index}"
-    bvstr = await get_quote_blame_victim_str_by_id(quote_id)
 
     if is_img == 1:
         # If `is_img` is 1, return a Message containing image
         file_url = await get_img_path_by_id(quote_id)
         return MessageSegment.image(file_url) + MessageSegment.text(
-            selection_str + bvstr
+            f"ID: {quote_id}, Position: {weighted_random_index}, Weight: {weight_top_100 if item_count - weighted_random_index <= 100 else weight_others}"
         )
     else:
         return MessageSegment.text(f"{quote}\n\n ID: {quote_id}")
@@ -301,8 +195,6 @@ async def remove_quote(id: str) -> MessageSegment:
     cursor = await get_db_cursor()
     if await is_quote_exist_in_db(id):
         await cursor.execute("DELETE FROM quotations WHERE id=?", (id,))
-        await cursor.execute("DELETE FROM blames WHERE id=?", (id,))
-        await cursor.execute("DELETE FROM victims WHERE quote_id=?", (id,))
         await conn.commit()
 
         # Remove from img directory
