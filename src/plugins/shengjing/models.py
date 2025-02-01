@@ -2,6 +2,7 @@ from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot import logger, get_driver
 from pathlib import Path
 
+from src.plugins.shengjing import QrSj
 from src.plugins.shengjing.config import *
 from src.plugins.shengjing.hook import get_db_conn, get_db_cursor
 
@@ -211,6 +212,97 @@ async def is_quote_exist_in_db(id: str) -> bool:
         return True
     else:
         return False
+
+
+async def insertImgData(sj: QrSj):
+    """
+    Description: 将QrSj对象插入数据库
+    Args:
+        sj: QrSj对象
+
+    Returns: None
+
+    """
+    conn = await get_db_conn()
+    cursor = await get_db_cursor()
+
+    # 获取当前群组的最大group_id
+    sql_cmd = "SELECT MAX(group_id) FROM sj where belong_group = :belong_group and is_deleted = 1;"
+    await cursor.execute(sql_cmd, {'belong_group': sj.belong_group})
+    max_id_row = await cursor.fetchone()
+    max_id = max_id_row[0] if max_id_row[0] is not None else 0
+    print(max_id)
+    sj.group_id = max_id + 1
+
+    # 插入数据
+    sql_text = "insert into sj ( img_name, img_note,  url_get, url_delete, upload_by, upload_time,belong_group,group_id) values ( :img_name, :img_note,  :url_get, :url_delete, :upload_by, :upload_time,:belong_group,:group_id);"
+    await cursor.execute(sql_text, {'img_name': sj.img_name, 'img_note': sj.img_note, 'url_get': sj.url_get,
+                                    'url_delete': sj.url_delete, 'upload_by': sj.upload_by,
+                                    'upload_time': sj.upload_time,
+                                    'belong_group': sj.belong_group, 'group_id': sj.group_id})
+    await conn.commit()
+    # await conn.close()
+    logger.success(f"Tried adding image quotation, whose id is {sj.group_id}")
+
+
+async def getRandomSj(belong_group):
+    """
+    Description: 随机获取一张圣经
+    Args:
+        belong_group: 群组号
+
+    Returns: 圣经消息段
+
+    """
+    cursor = await get_db_cursor()
+    sql_text = "select url_get,group_id,img_note from sj where belong_group = :belong_group and is_deleted = 1 order by random();"
+    await cursor.execute(sql_text, {'belong_group': belong_group})
+    result = await cursor.fetchone()
+    return MessageSegment.image(result[0]) + MessageSegment.text(
+        f"ID: {result[1]}{',标签:#' + result[2] if result[2] != '' else ''}"
+    )
+
+
+async def getSjById(group_id, belong_group):
+    """
+    Description: 根据ID获取圣经
+    Args:
+        group_id: 当前群组查询的ID
+        belong_group: 所属群组
+
+    Returns: 圣经消息段
+
+    """
+    cursor = await get_db_cursor()
+    sql_text = "select url_get,img_note from sj where group_id = :group_id and belong_group = :belong_group;"
+    await cursor.execute(sql_text, {'group_id': group_id, 'belong_group': belong_group})
+    result = await cursor.fetchone()
+    if result is None:
+        return MessageSegment.text("未找到该圣经")
+    return MessageSegment.image(result[0]) + MessageSegment.text(
+        f"ID: {group_id}{',标签:#' + result[1] if result[1] != '' else ''}"
+    )
+
+
+async def getSjByNote(note, belong_group):
+    """
+    Description: 根据标签获取圣经
+    Args:
+        note: 标签，模糊匹配
+        belong_group: 所属群组
+
+    Returns: 圣经消息段
+
+    """
+    cursor = await get_db_cursor()
+    sql_text = "select url_get,group_id,img_note from sj where img_note like :note and belong_group = :belong_group order by random();"
+    await cursor.execute(sql_text, {'note': "%" + note + "%", 'belong_group': belong_group})
+    result = await cursor.fetchone()
+    if result is None:
+        return MessageSegment.text("未找到标签的圣经")
+    return MessageSegment.image(result[0]) + MessageSegment.text(
+        f"ID: {result[1]}{',标签:#' + result[2]}"
+    )
 
 
 if __name__ == "__main__":

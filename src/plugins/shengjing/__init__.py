@@ -4,6 +4,12 @@ from nonebot.params import CommandArg, ShellCommandArgs, RegexStr
 from nonebot.rule import Namespace, ArgumentParser
 from nonebot.permission import SUPERUSER
 
+import datetime
+import uuid
+from nonebot import on_startswith
+
+import requests
+from src.plugins.shengjing.image_upload import QrSj
 from src.plugins.shengjing.models import *
 
 import re
@@ -41,6 +47,7 @@ async def handle_max_id(args: Namespace = ShellCommandArgs()):
     Args:
         args (Namespace, optional): Defaults to ShellCommandArgs().
     """
+    print(args)
     if args.max_id:
         await record_call_count("get_max_id")
         await shengjing.send(f"当前最大ID: {await get_max_id()}")
@@ -64,10 +71,113 @@ async def handle_call_counts(args: Namespace = ShellCommandArgs()):
     if args.call_count:
         await shengjing.send(str(await get_call_count("all")))
 
+# 从图床获取圣经指令
+parser_test = ArgumentParser("nmsj", add_help=False)
+parser_test.add_argument("-id", "--id")
+parser_test.add_argument("-n", "--note")
+
+sjnm = on_shell_command("测试", aliases={"nmsj"}, priority=2, block=True, parser=parser_test)
+
+
+@sjnm.handle()
+async def get_quote_bed(event: Event, args: Message = CommandArg()):
+    """
+    Description: 从图床获取圣经函数
+    Args:
+        event: 消息事件
+        args: 消息内容
+
+    Returns:
+
+    """
+    # print("args1", args)
+    if not args.extract_plain_text():  # Message is only "sj"
+        await record_call_count("get_random")
+        await sjnm.send(await getRandomSj(event.group_id))
+
+
+@sjnm.handle()
+async def get_sj_by_id(event: Event, args: Namespace = ShellCommandArgs()):
+    """
+    Description: 通过当前群组ID获取圣经函数
+    Args:
+        event: 消息事件
+        args: 消息内容
+
+    Returns:
+
+    """
+    # print("args", args)
+    if args.id:
+        await record_call_count("get_by_id")
+        res = await getSjById(args.id, event.group_id)
+        await sjnm.send(res)
+
+@sjnm.handle()
+async def get_sj_by_note(event: Event, args: Namespace = ShellCommandArgs()):
+    """
+    Description: 通过备注获取圣经函数
+    Args:
+        event: 消息事件
+        args: 消息内容
+
+    Returns:
+
+    """
+    # print("args", args)
+    if args.note:
+        res = await getSjByNote(args.note, event.group_id)
+        await sjnm.send(res)
 
 shengjing_add_img = on_fullmatch(("添加", "tj"), block=False)
+# 图床添加图片测试指令
+shengjing_add_img_bed = on_startswith(("tjnm"), block=False)
 shengjing_specify = on_regex(r"^(sj|圣经)\d+")
 shengjing_remove = on_regex(r"^(删除)\d+", permission=SUPERUSER)
+
+
+@shengjing_add_img_bed.handle()
+async def handle_func(event: Event):
+    """
+    Description: 向图床添加圣经图片函数
+    Args:
+        event: 消息事件
+
+    Returns: 添加结果，包含id与标签
+    """
+    await record_call_count("add_image")
+    reply_message = (
+        event.reply.message
+        if hasattr(event, "reply") and event.reply
+        else event.message
+    )
+    image_urls = extract_image_urls(reply_message)
+
+    # Only require one image
+    if len(image_urls) != 1:
+        await shengjing.finish("请回复一张待添加图片")
+
+    # 构建一个 QrSj 对象
+    image = QrSj()
+    image.img_name = str(uuid.uuid4())
+    print(event.message)
+    # 获取添加图片的标签
+    image.img_note = str(event.message).replace("添加", "").replace("tjnm", "").strip()
+    image.upload_by = str(event.user_id)
+    image.upload_time = str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    image.belong_group = str(event.group_id)
+    img_data = requests.get(image_urls[0]).content
+    # 利用构建好的 QrSj 对象上传图片，并返回获取链接与删除链接
+    upload_res = image.imgUpload(img_data)
+
+    # 如果上传失败，返回错误信息
+    if upload_res != "True":
+        await shengjing.send("已存在相同图片！")
+        return
+    # 如果上传成功，将图片信息插入数据库
+    await insertImgData(image)
+    await shengjing.send(
+        f"添加成功, ID: {str(image.group_id)}{',标签:#' + image.img_note if image.img_note != '' else ''}")
 
 
 @shengjing_add_img.handle()
@@ -78,7 +188,6 @@ async def handle_func(event: Event, bot: Bot):
         event (Event): To retrieve the image specified by the user
     """
     await record_call_count("add_image")
-
     reply_message = (
         event.reply.message
         if hasattr(event, "reply") and event.reply
