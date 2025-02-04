@@ -168,7 +168,7 @@ async def get_quote_blame_victim_str_by_id(id: str) -> str:
     return blame_str + victims_str
 
 
-async def get_quote_by_id(id: str) -> Message | MessageSegment:
+async def get_quote_by_id(id: str):
     cursor = await get_db_cursor()
     await cursor.execute("SELECT quotation, is_img FROM quotations WHERE id = ?", (id,))
     result = await cursor.fetchone()
