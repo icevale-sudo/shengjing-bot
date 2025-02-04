@@ -1,16 +1,17 @@
-from nonebot.adapters.onebot.v11 import MessageSegment
+from typing import Any, Coroutine
+
+from nonebot.adapters.onebot.v11 import MessageSegment, Message
 from nonebot import logger, get_driver, get_bot
 from pathlib import Path
 
 from src.plugins.shengjing.config import *
 from src.plugins.shengjing.hook import get_db_conn, get_db_cursor
 
-import sqlite3
 import subprocess
 import os
 import random
 import time
-import json
+import base64
 
 
 async def insert_img_quotation(image_id: int):
@@ -22,6 +23,7 @@ async def insert_img_quotation(image_id: int):
 
     logger.success(f"Tried adding image quotation, whose id is {image_id}")
 
+
 async def insert_quote_blame(quote_id: int, created_timestamp: int, requester_id: str, sender_id: str):
     conn = await get_db_conn()
     cursor = await get_db_cursor()
@@ -30,7 +32,9 @@ async def insert_quote_blame(quote_id: int, created_timestamp: int, requester_id
     await cursor.execute(sql_cmd, (quote_id, timestring, requester_id, sender_id))
     await conn.commit()
 
-    logger.success(f"Tried adding quotation blame, id: {quote_id}, time: {timestring}, req: {requester_id}, sender: {sender_id}")
+    logger.success(
+        f"Tried adding quotation blame, id: {quote_id}, time: {timestring}, req: {requester_id}, sender: {sender_id}")
+
 
 async def get_quote_blame(quote_id: int):
     cursor = await get_db_cursor()
@@ -45,19 +49,21 @@ async def get_quote_blame(quote_id: int):
     else:
         return None
 
+
 async def insert_quote_victim(quote_id: int, victim: str):
     conn = await get_db_conn()
     cursor = await get_db_cursor()
     # Check if the victim exist to avoid duplication
     await cursor.execute(f"SELECT victim FROM victims WHERE quote_id = ? AND victim = ?", (quote_id, victim))
     result = await cursor.fetchone()
-    
+
     if not result:
         sql_cmd = "INSERT INTO victims (quote_id, victim) VALUES (?, ?)"
         await cursor.execute(sql_cmd, (quote_id, victim))
         await conn.commit()
 
         logger.success(f"Tried adding quotation victim, id: {quote_id}, victims: {victim}")
+
 
 async def get_quote_victim(quote_id: int):
     cursor = await get_db_cursor()
@@ -71,6 +77,7 @@ async def get_quote_victim(quote_id: int):
     else:
         return None
 
+
 async def remove_quote_victim(quote_id: int, victim: str):
     conn = await get_db_conn()
     cursor = await get_db_cursor()
@@ -79,6 +86,7 @@ async def remove_quote_victim(quote_id: int, victim: str):
         await conn.commit()
         logger.success(f"Remove victim {victim} from quotation {quote_id}")
 
+
 async def remove_quote_all_victims(quote_id: int):
     conn = await get_db_conn()
     cursor = await get_db_cursor()
@@ -86,6 +94,7 @@ async def remove_quote_all_victims(quote_id: int):
         await cursor.execute("DELETE FROM victims WHERE quote_id=?", (quote_id,))
         await conn.commit()
         logger.success(f"Remove all victims from quotation {quote_id}")
+
 
 async def get_max_id() -> int:
     cursor = await get_db_cursor()
@@ -111,11 +120,14 @@ async def download_image(url: str):
     subprocess.run(command, capture_output=True, text=True)
 
 
-async def get_img_path_by_id(id: str) -> str:
-    file_path = f"{IMG_DIR_PATH}{id}.png"
-    file_url = Path(file_path).as_uri()
+async def get_img_base64_uri_by_id(id: str) -> str:
+    file_path = Path(f"{IMG_DIR_PATH}{id}.png")
+    with open(file_path, "rb") as f:
+        img_base64 = base64.b64encode(f.read()).decode()
+    img_base64_uri = f"base64://{img_base64}"
 
-    return file_url
+    return img_base64_uri
+
 
 async def get_name_str_by_user_id(user_id: str):
     bot = get_bot()
@@ -125,6 +137,7 @@ async def get_name_str_by_user_id(user_id: str):
     else:
         return user_id
 
+
 async def get_quote_blame_victim_str_by_id(id: str) -> str:
     # Get blame info if exist
     blames = await get_quote_blame(id)
@@ -132,7 +145,7 @@ async def get_quote_blame_victim_str_by_id(id: str) -> str:
     if not blames is None:
         createdTime, requester_id, sender_id = blames
         requester_str = await get_name_str_by_user_id(requester_id)
-        blame_str =  f'\n添加时间: {createdTime}'
+        blame_str = f'\n添加时间: {createdTime}'
         blame_str += f'\n添加者: {requester_str}'
         if requester_id != sender_id:
             sender_str = await get_name_str_by_user_id(sender_id)
@@ -151,10 +164,11 @@ async def get_quote_blame_victim_str_by_id(id: str) -> str:
         victims_str = f'\n正主:'
         for u in victims:
             victims_str += '\n' + await get_name_str_by_user_id(u)
-    
+
     return blame_str + victims_str
 
-async def get_quote_by_id(id: str) -> MessageSegment:
+
+async def get_quote_by_id(id: str) -> Message | MessageSegment:
     cursor = await get_db_cursor()
     await cursor.execute("SELECT quotation, is_img FROM quotations WHERE id = ?", (id,))
     result = await cursor.fetchone()
@@ -162,16 +176,16 @@ async def get_quote_by_id(id: str) -> MessageSegment:
     # ID is illegal
     if result is None:
         return MessageSegment.text("ERROR: No such ID in database or ID is illegal")
-    
+
     bvstr = await get_quote_blame_victim_str_by_id(id)
 
     if result[1] == 1:  # is image
-        return MessageSegment.image(await get_img_path_by_id(id)) + MessageSegment.text(bvstr)
+        return MessageSegment.image(await get_img_base64_uri_by_id(id)) + MessageSegment.text(bvstr)
     else:  # is text
         return MessageSegment.text(result[0] + '\n' + bvstr)
 
 
-async def get_weighted_random_quote(weight_top_100, weight_others) -> MessageSegment:
+async def get_weighted_random_quote(weight_top_100, weight_others):
     cursor = await get_db_cursor()
 
     # Get item count from database
@@ -204,8 +218,8 @@ async def get_weighted_random_quote(weight_top_100, weight_others) -> MessageSeg
 
     if is_img == 1:
         # If `is_img` is 1, return a Message containing image
-        file_url = await get_img_path_by_id(quote_id)
-        return MessageSegment.image(file_url) + MessageSegment.text(
+        file_base64_uri = await get_img_base64_uri_by_id(quote_id)
+        return MessageSegment.image(file_base64_uri) + MessageSegment.text(
             selection_str + bvstr
         )
     else:
